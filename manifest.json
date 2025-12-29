@@ -1,0 +1,36 @@
+{
+  "name": "Sadiq Stopwatch",
+  "short_name": "SadiqTimer",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#F0F9F4",
+  "theme_color": "#009B4D",
+  "icons": [
+    {
+      "src": "sadiq.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "sadiq.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Single Timer",
+      "short_name": "Single",
+      "description": "Buka stopwatch untuk 1 orang",
+      "url": "index.html?mode=single",
+      "icons": [{ "src": "sadiq.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Multi Timer",
+      "short_name": "Multi",
+      "description": "Buka stopwatch grup",
+      "url": "index.html?mode=multiple",
+      "icons": [{ "src": "sadiq.png", "sizes": "192x192" }]
+    }
+  ]
+}

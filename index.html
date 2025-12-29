@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sadiq Multi-Stopwatch</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#009B4D">
+    <link rel="apple-touch-icon" href="sadiq.png">
+    <link rel="icon" type="image/png" href="sadiq.png">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        sadiq: {
+                            green: '#009B4D', // Warna Hijau Logo
+                            orange: '#F47920', // Warna Oranye Logo
+                            light: '#F0F9F4',
+                            dark: '#004d26'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        /* Custom Scrollbar for Lap List */
+        .lap-list::-webkit-scrollbar { width: 6px; }
+        .lap-list::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 4px; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans text-gray-800">
+
+    <nav class="bg-white shadow-md sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center">
+                    <img src="sadiq.png" alt="Sadiq Logo" class="h-10 w-auto mr-3">
+                    <span class="font-bold text-xl text-sadiq-green tracking-wide">Sadiq<span class="text-sadiq-orange">Timer</span></span>
+                </div>
+                <div class="flex space-x-2">
+                    <button onclick="exportData()" class="p-2 text-sadiq-green hover:bg-sadiq-light rounded-full transition" title="Export Data">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    </button>
+                    <label class="p-2 text-sadiq-orange hover:bg-orange-50 rounded-full transition cursor-pointer" title="Import Data">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                        <input type="file" id="importFile" class="hidden" onchange="importData(this)">
+                    </label>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-7xl mx-auto px-4 py-4 flex flex-wrap justify-between items-center bg-sadiq-light border-b border-sadiq-green/20">
+        <div class="space-x-2 mb-2 sm:mb-0">
+            <button onclick="addRacer()" class="bg-sadiq-green text-white px-4 py-2 rounded-lg shadow hover:bg-sadiq-dark transition text-sm font-medium">+ Tambah Orang</button>
+            <button onclick="removeRacer()" class="bg-white text-red-500 border border-red-200 px-4 py-2 rounded-lg hover:bg-red-50 transition text-sm font-medium">- Kurangi</button>
+        </div>
+        <div class="text-sm text-gray-500">
+            Mode: <span id="activeMode" class="font-bold text-sadiq-green">Multiple</span>
+        </div>
+    </div>
+
+    <main class="max-w-7xl mx-auto px-4 py-6">
+        <div id="timersContainer" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            </div>
+    </main>
+
+    <script>
+        // --- State Management ---
+        let racers = JSON.parse(localStorage.getItem('sadiqStopwatchData')) || [
+            { id: 1, name: 'Atlet 1', time: 0, isRunning: false, startTimestamp: null, laps: [] },
+            { id: 2, name: 'Atlet 2', time: 0, isRunning: false, startTimestamp: null, laps: [] }
+        ];
+        
+        // Cek URL params untuk shortcut PWA
+        const urlParams = new URLSearchParams(window.location.search);
+        const mode = urlParams.get('mode');
+
+        if (mode === 'single' && racers.length > 1) {
+            racers = [racers[0]]; // Reset ke 1 orang jika shortcut single ditekan
+            document.getElementById('activeMode').innerText = "Single Focus";
+        }
+
+        let interval = null;
+
+        // --- Core Functions ---
+
+        function renderTimers() {
+            const container = document.getElementById('timersContainer');
+            container.innerHTML = '';
+
+            racers.forEach((racer, index) => {
+                const formattedTime = formatTime(racer.time);
+                
+                // HTML Template untuk setiap kartu Timer
+                const card = document.createElement('div');
+                card.className = `bg-white rounded-xl shadow-lg border-l-4 border-sadiq-green overflow-hidden flex flex-col h-[450px] md:h-[500px] transition-transform transform hover:scale-[1.01]`;
+                
+                let lapsHTML = racer.laps.map((lap, i) => `
+                    <div class="flex justify-between text-sm py-2 border-b border-gray-100 last:border-0">
+                        <span class="text-gray-500">Putaran ${racer.laps.length - i}</span>
+                        <span class="font-mono font-medium text-gray-700">${formatTime(lap)}</span>
+                    </div>
+                `).join('');
+
+                card.innerHTML = `
+                    <div class="p-5 bg-gray-50 border-b flex justify-between items-center">
+                        <input type="text" value="${racer.name}" onchange="updateName(${index}, this.value)" 
+                            class="bg-transparent font-bold text-lg text-gray-700 focus:outline-none focus:border-b-2 focus:border-sadiq-orange w-full" placeholder="Nama Atlet">
+                        <div class="h-3 w-3 rounded-full ${racer.isRunning ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}"></div>
+                    </div>
+                    
+                    <div class="flex-grow flex flex-col items-center justify-center py-6 bg-white">
+                        <div class="text-6xl md:text-7xl font-mono font-bold text-sadiq-green tracking-tighter tabular-nums">
+                            ${formattedTime}
+                        </div>
+                    </div>
+
+                    <div class="px-5 pb-2 flex justify-center space-x-3">
+                        <button onclick="toggleTimer(${index})" class="flex-1 py-3 rounded-lg font-bold text-white shadow-md transition ${racer.isRunning ? 'bg-red-500 hover:bg-red-600' : 'bg-sadiq-green hover:bg-sadiq-dark'}">
+                            ${racer.isRunning ? 'Stop' : 'Mulai'}
+                        </button>
+                        <button onclick="lapTimer(${index})" class="px-6 py-3 rounded-lg font-bold bg-sadiq-orange text-white shadow-md hover:bg-orange-600 transition" ${!racer.isRunning ? 'disabled class="opacity-50 cursor-not-allowed px-6 py-3 rounded-lg bg-gray-300 text-white"' : ''}>
+                            Putaran
+                        </button>
+                        <button onclick="resetTimer(${index})" class="px-4 py-3 rounded-lg font-bold text-gray-500 hover:bg-gray-100 transition">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                        </button>
+                    </div>
+
+                    <div class="bg-gray-50 p-4 h-40 overflow-y-auto lap-list border-t border-gray-200">
+                        <h4 class="text-xs font-bold text-gray-400 uppercase mb-2 tracking-wider">Catatan Putaran</h4>
+                        ${lapsHTML || '<p class="text-center text-gray-400 text-sm italic mt-4">Belum ada data putaran</p>'}
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function formatTime(ms) {
+            let date = new Date(ms);
+            let m = date.getUTCMinutes().toString().padStart(2, '0');
+            let s = date.getUTCSeconds().toString().padStart(2, '0');
+            let cs = Math.floor(date.getUTCMilliseconds() / 10).toString().padStart(2, '0');
+            return `${m}:${s}.${cs}`;
+        }
+
+        function updateLoop() {
+            const now = Date.now();
+            let active = false;
+            
+            racers.forEach(r => {
+                if (r.isRunning) {
+                    const delta = now - r.startTimestamp;
+                    r.time += delta;
+                    r.startTimestamp = now;
+                    active = true;
+                }
+            });
+
+            if (active) {
+                renderTimers();
+                requestAnimationFrame(updateLoop);
+            } else {
+                renderTimers(); // Render sekali saat stop untuk update UI state
+            }
+            saveLocal();
+        }
+
+        // --- Actions ---
+
+        function toggleTimer(index) {
+            const r = racers[index];
+            if (r.isRunning) {
+                r.isRunning = false;
+                r.startTimestamp = null;
+            } else {
+                r.isRunning = true;
+                r.startTimestamp = Date.now();
+                requestAnimationFrame(updateLoop);
+                
+                // Trigger Notification (PWA Feature)
+                if (Notification.permission === 'granted') {
+                    // Hanya contoh notif sederhana
+                    // new Notification(`Sadiq Timer: ${r.name} Mulai!`);
+                }
+            }
+            renderTimers();
+        }
+
+        function lapTimer(index) {
+            const r = racers[index];
+            if (r.isRunning) {
+                // Tambahkan lap ke urutan pertama (LIFO)
+                r.laps.unshift(r.time);
+                saveLocal();
+                renderTimers();
+            }
+        }
+
+        function resetTimer(index) {
+            if(confirm('Reset waktu untuk orang ini?')) {
+                racers[index].time = 0;
+                racers[index].isRunning = false;
+                racers[index].laps = [];
+                renderTimers();
+                saveLocal();
+            }
+        }
+
+        function updateName(index, val) {
+            racers[index].name = val;
+            saveLocal();
+        }
+
+        function addRacer() {
+            if (racers.length < 4) {
+                racers.push({ id: Date.now(), name: `Atlet ${racers.length + 1}`, time: 0, isRunning: false, laps: [] });
+                renderTimers();
+                saveLocal();
+            } else {
+                alert("Maksimal 4 orang.");
+            }
+        }
+
+        function removeRacer() {
+            if (racers.length > 2) {
+                racers.pop();
+                renderTimers();
+                saveLocal();
+            } else {
+                alert("Minimal 2 orang.");
+            }
+        }
+
+        // --- Data Persistence ---
+
+        function saveLocal() {
+            localStorage.setItem('sadiqStopwatchData', JSON.stringify(racers));
+        }
+
+        function exportData() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(racers));
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", "sadiq_timer_backup.json");
+            document.body.appendChild(downloadAnchorNode);
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+        }
+
+        function importData(input) {
+            const file = input.files[0];
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (Array.isArray(data)) {
+                        racers = data;
+                        renderTimers();
+                        saveLocal();
+                        alert("Data berhasil diimpor!");
+                    }
+                } catch (err) {
+                    alert("Format file salah.");
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // --- PWA Service Worker Registration ---
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js')
+            .then(() => console.log('Service Worker Registered'));
+        }
+
+        // Request Notification Permission
+        if ('Notification' in window && Notification.permission !== 'granted') {
+            Notification.requestPermission();
+        }
+
+        // Init
+        renderTimers();
+
+    </script>
+</body>
+</html>
